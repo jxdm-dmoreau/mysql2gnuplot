@@ -1,0 +1,161 @@
+#!/usr/bin/perl -w
+use strict;
+use Getopt::Long;
+use DBI();
+
+my $VERSION="0.1";
+
+my $host='localhost';
+my $base='qos_satlabs';
+my $user='root';
+my $pass='noroot';
+my $verbose;
+my $sql_file="";
+my $out_file="out";
+my $average = 0;
+
+sub print_help {
+	print("\nmysql2gnuplot version $VERSION\n\n");
+	print("OPTIONS:\n");
+	print("--host=s \t Hostname of MySQL server\n");
+	print("--base=s \t MySQL DataBase name\n");
+	print("--user=s \t MySQL user\n");
+	print("--pass=s \t MySQL password\n");
+	print("--sql=s \t File containing a SQL request\n");
+	print("--out=s \t Gnuplot data\n");
+	print("--average=i \t Each value will be average on this value. Default value: disabled.\n");
+	print("\nAUTHOR:\n");
+	print("David MOREAU <cmoidavid\@gmail.com>\n");
+	exit(1);
+}
+
+
+# parameters
+my $result = GetOptions (
+		"host=s"  => \$host,
+		"base=s"  => \$base,
+		"user=s"  => \$user,
+		"pass=s"  => \$pass,
+		"sql=s"   => \$sql_file,
+		"out=s"   => \$out_file,
+		"average=i"   => \$average,
+		"verbose" => \$verbose);
+
+if (!$result) {
+	print_help();
+}
+
+if ($verbose) {
+	print("CONFIGURATION:\n");
+	print("DB host...............: $host\n");
+	print("DB base...............: $base\n");
+	print("DB user...............: $user\n");
+	print("DB pass...............: $pass\n");
+	print("SQL file..............: $sql_file\n");
+	print("OUT file..............: $out_file\n");
+	print("Average...............: $average\n");
+	print("\n");
+}
+
+# Connect to the database.
+my $dbh = DBI->connect("DBI:mysql:database=$base;host=$host",$user, $pass,{'RaiseError' => 1});
+
+# read the sql file
+my $sql_request;
+my $value_requested;
+open(SQL, $sql_file);
+$sql_request = <SQL>;
+close(SQL);
+
+# find value select
+if ($sql_request =~ /SELECT\s(\w+)\s/) {
+	$value_requested = $1;
+} else {
+	print("ERROR in SELECT request");
+	exit(1);
+}
+
+# prepare SQL request
+my $sth = $dbh->prepare($sql_request);
+$sth->execute();
+
+
+
+
+# init 
+my @window;
+if ($average > 0) {
+	for(my $i=0; $i<$average; $i++) {
+		$window[$i] = 0;
+	}
+}
+
+
+my $win_index = 0;
+my $total = 0;
+my $max;
+my $min;
+my $count = 0;
+my $value = 0;
+
+open(OUT,">$out_file") or die("Can't open $out_file\n");
+while (my $ref = $sth->fetchrow_hashref()) {
+
+	# retrieve value
+	$value = $ref->{$value_requested};
+
+	# average?
+	if ($average > 0) {
+		# store value in window
+		$window[$win_index] = $value;
+		$win_index++;
+		$win_index %= $average;
+		$value = 0;
+		for(my $i=0; $i<$average; $i++) {
+			$value += $window[$i];
+		}
+		$value /= $average;
+	}
+
+	#  min and max
+	if ($count == 0) {
+		$max = $value;
+		$min = $value;
+	} else {
+		if ($value > $max) {
+			$max = $value;
+		}
+		if ($value < $min) {
+			$min = $value;
+		}
+	}
+
+	# avg
+	$total += $value;
+
+	# write value
+	print OUT "$value\n";
+
+	$count++;
+}
+$sth->finish();
+# results
+print("nb values.............: $count\n") if ($verbose);
+if ($count != 0) {
+	$total /= $count;
+	if ($verbose) {
+		print("average...............: $total\n");
+		print("min...................: $min\n");
+		print("max...................: $max\n");
+	}
+}
+
+
+
+$dbh->disconnect();
+
+
+
+# gnuplot
+#
+
