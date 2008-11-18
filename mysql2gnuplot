@@ -3,6 +3,7 @@ use strict;
 use Getopt::Long;
 use DBI();
 
+
 my $VERSION="0.1";
 
 my $host='localhost';
@@ -10,8 +11,6 @@ my $base='qos_satlabs';
 my $user='root';
 my $pass='noroot';
 my $verbose;
-my $sql_file="";
-my $out_file="out";
 my $average = 0;
 
 sub print_help {
@@ -21,8 +20,6 @@ sub print_help {
 	print("--base=s \t MySQL DataBase name\n");
 	print("--user=s \t MySQL user\n");
 	print("--pass=s \t MySQL password\n");
-	print("--sql=s \t File containing a SQL request\n");
-	print("--out=s \t Gnuplot data\n");
 	print("--average=i \t Each value will be average on this value. Default value: disabled.\n");
 	print("\nAUTHOR:\n");
 	print("David MOREAU <cmoidavid\@gmail.com>\n");
@@ -36,8 +33,6 @@ my $result = GetOptions (
 		"base=s"  => \$base,
 		"user=s"  => \$user,
 		"pass=s"  => \$pass,
-		"sql=s"   => \$sql_file,
-		"out=s"   => \$out_file,
 		"average=i"   => \$average,
 		"verbose" => \$verbose);
 
@@ -51,8 +46,6 @@ if ($verbose) {
 	print("DB base...............: $base\n");
 	print("DB user...............: $user\n");
 	print("DB pass...............: $pass\n");
-	print("SQL file..............: $sql_file\n");
-	print("OUT file..............: $out_file\n");
 	print("Average...............: $average\n");
 	print("\n");
 }
@@ -63,9 +56,7 @@ my $dbh = DBI->connect("DBI:mysql:database=$base;host=$host",$user, $pass,{'Rais
 # read the sql file
 my $sql_request;
 my $value_requested;
-open(SQL, $sql_file);
-$sql_request = <SQL>;
-close(SQL);
+$sql_request = <STDIN>;
 
 # find value select
 if ($sql_request =~ /SELECT\s(\w+)\s/) {
@@ -98,7 +89,6 @@ my $min;
 my $count = 0;
 my $value = 0;
 
-open(OUT,">$out_file") or die("Can't open $out_file\n");
 while (my $ref = $sth->fetchrow_hashref()) {
 
 	# retrieve value
@@ -134,7 +124,7 @@ while (my $ref = $sth->fetchrow_hashref()) {
 	$total += $value;
 
 	# write value
-	print OUT "$value\n";
+	print "$value\n";
 
 	$count++;
 }
@@ -153,9 +143,4 @@ if ($count != 0) {
 
 
 $dbh->disconnect();
-
-
-
-# gnuplot
-#
 
